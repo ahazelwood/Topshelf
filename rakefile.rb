@@ -1,15 +1,14 @@
 COPYRIGHT = "Copyright 2007-2011 Travis Smith, Chris Patterson, Dru Sellers, Henrik Feldt et al. All rights reserved."
-
-require File.dirname(__FILE__) + "/build_support/BuildUtils.rb"
+Dir["#{File.dirname(__FILE__)}/build_support/*.rb"].each { |ext| load ext }
 
 include FileTest
 require 'albacore'
-require File.dirname(__FILE__) + "/build_support/ilmergeconfig.rb"
-require File.dirname(__FILE__) + "/build_support/ilmerge.rb"
 
-BUILD_NUMBER_BASE = '2.2.2.0'
+BUILD_NUMBER_BASE = '2.2.2'
 PRODUCT = 'Topshelf'
 CLR_TOOLS_VERSION = 'v4.0.30319'
+build_number = ENV["BUILD_NUMBER"] || '0'
+VERSION = "#{BUILD_NUMBER_BASE}.#{build_number}"
 
 BUILD_CONFIG = ENV['BUILD_CONFIG'] || "Release"
 BUILD_CONFIG_KEY = ENV['BUILD_CONFIG_KEY'] || 'NET40'
@@ -29,23 +28,6 @@ props = {
 }
 
 puts "Building for .NET Framework #{TARGET_FRAMEWORK_VERSION} in #{BUILD_CONFIG}-mode."
- 
-desc "Displays a list of tasks"
-task :help do
-
-  taskHash = Hash[*(`rake.bat -T`.split(/\n/).collect { |l| l.match(/rake (\S+)\s+\#\s(.+)/).to_a }.collect { |l| [l[1], l[2]] }).flatten] 
- 
-  indent = "                          "
-  
-  puts "rake #{indent}#Runs the 'default' task"
-  
-  taskHash.each_pair do |key, value|
-    if key.nil?  
-      next
-    end
-    puts "rake #{key}#{indent.slice(0, indent.length - key.length)}##{value}"
-  end
-end
 
 
 desc "Cleans, compiles, il-merges, unit tests, prepares examples, packages zip and runs MoMA"
@@ -59,20 +41,18 @@ task :unclean => [:compile, :ilmerge, :tests, :prepare_examples]
 
 desc "Update the common version information for the build. You can call this task without building."
 assemblyinfo :global_version do |asm|
-  asm_version = BUILD_NUMBER_BASE
   commit_data = get_commit_hash_and_date
   commit = commit_data[0]
   commit_date = commit_data[1]
-  build_number = "#{BUILD_NUMBER_BASE}.#{Date.today.strftime('%y%j')}"
-  tc_build_number = ENV["BUILD_NUMBER"]
-  puts "##teamcity[buildNumber '#{build_number}-#{tc_build_number}']" unless tc_build_number.nil?
+  
+  puts "##teamcity[buildNumber '#{build_number}']"
   
   # Assembly file config
   asm.product_name = PRODUCT
   asm.description = "Git commit hash: #{commit} - #{commit_date} - Topshelf is an open source project for hosting services without friction. Either link Topshelf to your program and it *becomes* a service installer or use Topshelf.Host to shelf your services by placing them in subfolders of the 'Services' folder under the folder of Topshelf.Host.exe. github.com/Topshelf. topshelf-project.com. Original author company: CFT & ACM."
-  asm.version = asm_version
+  asm.version = VERSION
   asm.file_version = build_number
-  asm.custom_attributes :AssemblyInformationalVersion => "#{asm_version}",
+  asm.custom_attributes :AssemblyInformationalVersion => "#{VERSION}",
 	:ComVisibleAttribute => false,
 	:CLSCompliantAttribute => false # Henrik: at the moment the project isn't CLS compliant due to dependencies.
   asm.copyright = COPYRIGHT
@@ -193,7 +173,7 @@ task :package => [:zip_output, :nuget]
 desc "ZIPs up the build results and runs the MoMA analyzer."
 zip :zip_output do |zip|
 	zip.directories_to_zip = [props[:stage]]
-	zip.output_file = "Topshelf-#{BUILD_NUMBER_BASE}.zip"
+	zip.output_file = "Topshelf-#{VERSION}.zip"
 	zip.output_path = [props[:artifacts]]
 end
 
@@ -209,7 +189,7 @@ end
 
 desc "Builds the nuget package"
 task :nuget do
-	sh "lib/nuget pack topshelf.nuspec /OutputDirectory build_artifacts"
+	sh "lib/nuget pack topshelf.nuspec /OutputDirectory build_artifacts /Version #{VERSION}"
 end
 
 def project_outputs(props)
